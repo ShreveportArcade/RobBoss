@@ -21,8 +21,6 @@ public class RobBossEditor : EditorWindow {
 	static Renderer paintTarget;
 	static Vector2 uv;
 
-	static int w = 1024;
-	static int h = 1024;
 	static Texture2D canvas;
 	static string canvasPath;
 	static RenderTexture _renderCanvas;
@@ -30,19 +28,18 @@ public class RobBossEditor : EditorWindow {
 		get {
 			if (paintTarget == null) return null;
 			if (_renderCanvas == null) {
-				_renderCanvas = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32);
-		    	_renderCanvas.Create();
-
 		    	canvas = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]) as Texture2D;
 		    	if (canvas == null) {
+					_renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
+					_renderCanvas.Create();
 					Graphics.Blit(Texture2D.whiteTexture, _renderCanvas);
 			    }
 			    else {
-					canvasPath = Application.dataPath + AssetDatabase.GetAssetPath(canvas.GetInstanceID());
-			    	canvasPath = canvasPath.Replace("AssetsAssets", "Assets");
+					_renderCanvas = new RenderTexture(canvas.width, canvas.height, 0, RenderTextureFormat.ARGB32);
+					_renderCanvas.Create();
+					canvasPath = AssetDatabase.GetAssetPath(canvas.GetInstanceID());
 					Graphics.Blit(canvas, _renderCanvas);
 			    }
-
 		    	paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], _renderCanvas);
 			}
 			return _renderCanvas;
@@ -133,31 +130,44 @@ public class RobBossEditor : EditorWindow {
 
 	void OnGUI () {
 		EditorGUILayout.ObjectField("Paint Target", paintTarget, typeof(Renderer), true);
-		canvasID = EditorGUILayout.Popup("Canvas", canvasID, canvasNames);
+		
+		int newCanvasID = EditorGUILayout.Popup("Canvas", canvasID, canvasNames);
+		if (newCanvasID != canvasID) {
+			ResetCanvas();
+			canvasID = newCanvasID;
+		}
+		
 		directional = EditorGUILayout.Toggle("Directional", directional);
 		brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
 		color = EditorGUILayout.ColorField("Color", color);		
 		radius = EditorGUILayout.FloatField("Radius", radius);
-		blend = EditorGUILayout.FloatField("Blend", blend);
+		blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
 		if (!painting && GUILayout.Button("Start Painting")) {
 			painting = true;
 			SceneView.onSceneGUIDelegate += onSceneFunc;
+			Texture tex = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]);
+			if (renderCanvas != null && renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
+				ResetCanvas();
+			}
 		}
 		else if (painting && GUILayout.Button("Stop Painting")) {
 			painting = false;
 			SceneView.onSceneGUIDelegate -= onSceneFunc;
-			paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], canvas);
-			if (_renderCanvas != null) {
-				_renderCanvas.Release();
-				_renderCanvas = null;
-			}
 		}
 	}
 
+	static void ResetCanvas () {
+		if (_renderCanvas != null) {
+			_renderCanvas.Release();
+			_renderCanvas = null;
+		}
+		paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], canvas);
+	}
+
 	public static void OnSceneGUI(SceneView sceneview) {
-		EventType t = Event.current.type;			
-		if (painting && (t == EventType.MouseDown || t == EventType.MouseDrag) && RaycastTarget()) {
+		EventType t = Event.current.type;
+		if (painting && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
 			PaintTarget();
 		}
 		else if (t == EventType.MouseUp) {
@@ -221,24 +231,30 @@ public class RobBossEditor : EditorWindow {
 		canvasNames = names.ToArray();
 	}
 
-	static bool RaycastTarget() {	
+	static bool RaycastTarget(bool mouseMoved) {	
 		if (raycastTarget == null) return false;
 
 		Ray ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
 		RaycastHit hit;
 		if (raycastTarget.Raycast(ray, out hit, Mathf.Infinity)) {
-			if (directional) {
+			if (directional && mouseMoved) {
 				Vector2 dir = ((hit.textureCoord - uv).normalized + Vector2.one) * 0.5f;
 				color = new Color(dir.x, dir.y, 0, 1);
+				uv = hit.textureCoord;
+			}
+			else if (!directional) {
+				uv = hit.textureCoord;
 			}
 
-			uv = hit.textureCoord;
 			brushMaterial.SetVector("_Transform", new Vector4(uv.x, uv.y, 0, radius));
-			brushMaterial.SetColor("_Color", color);
+
+			Color c = color;
+			c.a *= blend;
+			brushMaterial.SetColor("_Color", c);
 
 			Handles.color = color;
 			Handles.DrawLine(hit.point, hit.point + hit.normal * 2);
-			Handles.DrawSolidDisc(hit.point, hit.normal, radius * paintTarget.bounds.extents.y);
+			Handles.DrawWireDisc(hit.point, hit.normal, radius * paintTarget.bounds.extents.y);
 			HandleUtility.Repaint();
 
 			return true;
