@@ -7,7 +7,22 @@ using UnityEditor;
 
 public class RobBossEditor : EditorWindow {
 
-	static RobBossEditor window;
+	static RobBossEditor _window;
+	static RobBossEditor window {
+		get {
+			if (_window == null) {
+				_window = (RobBossEditor)EditorWindow.GetWindow(
+					typeof(RobBossEditor), 
+					false, 
+					"R. Boss Painter", 
+					true
+				);
+			}
+			return _window;
+		}
+	}
+	public List<Texture2D> undoTextures = new List<Texture2D>();
+
 	static bool painting = false;
 
 	static int canvasID = 0;
@@ -29,7 +44,7 @@ public class RobBossEditor : EditorWindow {
 		get {
 			if (paintTarget == null) return null;
 			if (_renderCanvas == null) {
-		    	canvas = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]) as Texture2D;
+				canvas = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]) as Texture2D;
 		    	if (canvas == null) {
 					_renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
 					_renderCanvas.Create();
@@ -90,13 +105,13 @@ public class RobBossEditor : EditorWindow {
 
 	[MenuItem ("Window/Rob Boss Painter")]
 	static void Open () {
-		window = EditorWindow.GetWindow(typeof(RobBossEditor)) as RobBossEditor;
 		window.minSize = new Vector2(250, 360);
 		window.Show();
 	}
 
 	static SceneView.OnSceneFunc onSceneFunc;
     void OnEnable () {
+		Undo.undoRedoPerformed += UndoRedo;
    		if (onSceneFunc == null) onSceneFunc = new SceneView.OnSceneFunc(OnSceneGUI);
 
 		GameObject g = new GameObject("RobBossTarget");
@@ -114,10 +129,11 @@ public class RobBossEditor : EditorWindow {
 		string colorString = EditorPrefs.GetString("RobBoss.Color", "#FFFFFFFF");
 		ColorUtility.TryParseHtmlString(colorString, out color);
 		radius = EditorPrefs.GetFloat("RobBoss.Radius", 0.5f);
-		blend = EditorPrefs.GetFloat("RobBoss.Blend", 0.1f);
-    }
+		blend = EditorPrefs.GetFloat("RobBoss.Blend", 0.1f);		
+	}
 
     void OnDisable () {
+		Undo.undoRedoPerformed -= UndoRedo;
     	if (painting) SceneView.onSceneGUIDelegate -= onSceneFunc;
 
 		DestroyImmediate(colliderMesh);
@@ -130,7 +146,30 @@ public class RobBossEditor : EditorWindow {
 		EditorPrefs.SetFloat("RobBoss.Blend", blend);
     }
 
+	static bool didChange = false;
+	void RegisterChange () {
+		if (!didChange) return;
+		didChange = false;
+
+		Texture2D undoTex = new Texture2D(renderCanvas.width, renderCanvas.height);
+		RenderTexture.active = renderCanvas;
+		undoTex.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
+		undoTex.Apply();
+		RenderTexture.active = null;
+
+		Undo.RecordObject(window, "paints on canavs");
+		undoTextures.Add(undoTex);
+	}
+
+	void UndoRedo () {
+		int count = undoTextures.Count;
+		if (count > 0) Graphics.Blit(undoTextures[count-1], renderCanvas);
+		else if (canvas != null) Graphics.Blit(canvas, renderCanvas);
+		else Graphics.Blit(Texture2D.whiteTexture, renderCanvas);
+	}
+
 	void OnGUI () {
+		GUI.enabled = true;
 		Renderer r = EditorGUILayout.ObjectField("Paint Target", paintTarget, typeof(Renderer), true) as Renderer;
 		if (r != paintTarget) SetPaintTarget(r);
 
@@ -146,6 +185,7 @@ public class RobBossEditor : EditorWindow {
 		radius = EditorGUILayout.FloatField("Radius", radius);
 		blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
+		GUI.enabled = (paintTarget != null);
 		if (!painting && GUILayout.Button("Start Painting")) {
 			painting = true;
 			SceneView.onSceneGUIDelegate += onSceneFunc;
@@ -159,18 +199,23 @@ public class RobBossEditor : EditorWindow {
 			SceneView.onSceneGUIDelegate -= onSceneFunc;
 		}
 
-		EditorGUILayout.BeginHorizontal();
-		GUI.enabled = !string.IsNullOrEmpty(canvasPath);
-		if (GUILayout.Button("Save")) {
-			Save(canvasPath);
-		}
 		GUI.enabled = (_renderCanvas != null);
-		if (GUILayout.Button("Save As")) {
-			string name = paintTarget.name + canvasNames[canvasID] + ".png";
-			string path = EditorUtility.SaveFilePanel("Save texture as PNG", Application.dataPath, name, "png");
-			Save(path);
+		if (GUILayout.Button("Reset")) {
+			ResetCanvas();
 		}
-		GUI.enabled = true;
+
+		EditorGUILayout.BeginHorizontal();
+			GUI.enabled = !string.IsNullOrEmpty(canvasPath);
+			if (GUILayout.Button("Save")) {
+				Save(canvasPath);
+			}
+			
+			GUI.enabled = (_renderCanvas != null);
+			if (GUILayout.Button("Save As")) {
+				string name = paintTarget.name + canvasNames[canvasID] + ".png";
+				string path = EditorUtility.SaveFilePanel("Save texture as PNG", Application.dataPath, name, "png");
+				Save(path);
+			}
 		EditorGUILayout.EndHorizontal();
 	}
 
@@ -183,6 +228,7 @@ public class RobBossEditor : EditorWindow {
 		canvas.Apply();
 		RenderTexture.active = null;
 		File.WriteAllBytes(path, canvas.EncodeToPNG());
+		AssetDatabase.Refresh();
 
 		canvasPath = path;
 		path = path.Replace(Application.dataPath, "Assets");
@@ -190,7 +236,6 @@ public class RobBossEditor : EditorWindow {
 		TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
 		importer.isReadable = true;
 		AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
-		AssetDatabase.Refresh();
 		ResetCanvas();
 	}
 
@@ -200,15 +245,18 @@ public class RobBossEditor : EditorWindow {
 			_renderCanvas = null;
 		}
 		paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], canvas);
+		canvas = null;
+		canvasPath = null;
 	}
 
 	public static void OnSceneGUI(SceneView sceneview) {
 		EventType t = Event.current.type;
-		if (painting && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
+		if (painting && t != EventType.MouseUp && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
 			PaintTarget();
 		}
 		else if (t == EventType.MouseUp) {
             GUIUtility.hotControl = 0;
+			window.RegisterChange();
     	}
 	}
 
@@ -305,14 +353,12 @@ public class RobBossEditor : EditorWindow {
 		Event e = Event.current;
 		if (e.modifiers != EventModifiers.None) return;
 
-		if (e.type == EventType.MouseDown) {
-            GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
+		if (e.type == EventType.MouseDown) GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
+		
+		if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
 			Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
 			e.Use();
-    	}
-        else if (e.type == EventType.MouseDrag) {
-			Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
-			e.Use();
+			didChange = true;
         }
 	}
 }
