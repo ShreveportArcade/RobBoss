@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -32,12 +33,13 @@ public class RobBossEditor : EditorWindow {
 		    	if (canvas == null) {
 					_renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
 					_renderCanvas.Create();
+					canvasPath = null;
 					Graphics.Blit(Texture2D.whiteTexture, _renderCanvas);
 			    }
 			    else {
 					_renderCanvas = new RenderTexture(canvas.width, canvas.height, 0, RenderTextureFormat.ARGB32);
 					_renderCanvas.Create();
-					canvasPath = AssetDatabase.GetAssetPath(canvas.GetInstanceID());
+					canvasPath = Path.Combine(Directory.GetCurrentDirectory(), AssetDatabase.GetAssetPath(canvas.GetInstanceID()));
 					Graphics.Blit(canvas, _renderCanvas);
 			    }
 		    	paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], _renderCanvas);
@@ -129,8 +131,9 @@ public class RobBossEditor : EditorWindow {
     }
 
 	void OnGUI () {
-		EditorGUILayout.ObjectField("Paint Target", paintTarget, typeof(Renderer), true);
-		
+		Renderer r = EditorGUILayout.ObjectField("Paint Target", paintTarget, typeof(Renderer), true) as Renderer;
+		if (r != paintTarget) SetPaintTarget(r);
+
 		int newCanvasID = EditorGUILayout.Popup("Canvas", canvasID, canvasNames);
 		if (newCanvasID != canvasID) {
 			ResetCanvas();
@@ -147,7 +150,7 @@ public class RobBossEditor : EditorWindow {
 			painting = true;
 			SceneView.onSceneGUIDelegate += onSceneFunc;
 			Texture tex = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]);
-			if (renderCanvas != null && renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
+			if (_renderCanvas != null && _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
 				ResetCanvas();
 			}
 		}
@@ -155,6 +158,40 @@ public class RobBossEditor : EditorWindow {
 			painting = false;
 			SceneView.onSceneGUIDelegate -= onSceneFunc;
 		}
+
+		EditorGUILayout.BeginHorizontal();
+		GUI.enabled = !string.IsNullOrEmpty(canvasPath);
+		if (GUILayout.Button("Save")) {
+			Save(canvasPath);
+		}
+		GUI.enabled = (_renderCanvas != null);
+		if (GUILayout.Button("Save As")) {
+			string name = paintTarget.name + canvasNames[canvasID] + ".png";
+			string path = EditorUtility.SaveFilePanel("Save texture as PNG", Application.dataPath, name, "png");
+			Save(path);
+		}
+		GUI.enabled = true;
+		EditorGUILayout.EndHorizontal();
+	}
+
+	static void Save (string path) {
+		if (string.IsNullOrEmpty(path)) return;
+		
+		canvas = new Texture2D(renderCanvas.width, renderCanvas.height);
+		RenderTexture.active = renderCanvas;
+		canvas.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
+		canvas.Apply();
+		RenderTexture.active = null;
+		File.WriteAllBytes(path, canvas.EncodeToPNG());
+
+		canvasPath = path;
+		path = path.Replace(Application.dataPath, "Assets");
+		canvas = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D)) as Texture2D;
+		TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+		importer.isReadable = true;
+		AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+		AssetDatabase.Refresh();
+		ResetCanvas();
 	}
 
 	static void ResetCanvas () {
