@@ -58,7 +58,8 @@ Shader "Rob Boss/Brush" {
 
 					half4 canvas = tex2D(_MainTex, IN.uv_MainTex);
 					half4 brush = tex2D(_Brush, uv) * _Color;
-					canvas = lerp(canvas, brush, brush.a);
+					canvas.rgb = lerp(canvas.rgb, brush.rgb, brush.a);
+					canvas.a = canvas.a + brush.a;
 
 					return canvas;
 				}
