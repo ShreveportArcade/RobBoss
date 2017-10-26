@@ -21,20 +21,31 @@ public class RobBossEditor : EditorWindow {
 			return _window;
 		}
 	}
+
+	public Renderer paintTarget;
 	public List<Texture2D> undoTextures = new List<Texture2D>();
+	public int canvasID = 0;
+	public string[] canvasNames = new string[0];
+	static string canvasName { 
+		get { 
+			if (window.canvasNames.Length == 0) UpdateCanvasNames();
+			if (window.canvasNames.Length == 0) return "_MainTex";
+			return window.canvasNames[window.canvasID];
+		}
+	}
 
 	static bool painting = false;
+	static bool hasPaintTarget {
+		get { return window.paintTarget != null; }
+	}
 
-	static int canvasID = 0;
 	static bool directional = false;
 	static Color color = Color.white;
 	static float radius = 0.5f;
 	static float blend = 0.1f;
 
-	static string[] canvasNames = new string[0];
 	static MeshCollider raycastTarget;
 	static Mesh colliderMesh;
-	static Renderer paintTarget;
 	static Vector2 uv;
 
 	static Texture2D canvas;
@@ -42,9 +53,9 @@ public class RobBossEditor : EditorWindow {
 	static RenderTexture _renderCanvas;
 	static RenderTexture renderCanvas {
 		get {
-			if (paintTarget == null) return null;
+			if (!hasPaintTarget) return null;
 			if (_renderCanvas == null) {
-				canvas = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]) as Texture2D;
+				canvas = window.paintTarget.sharedMaterial.GetTexture(canvasName) as Texture2D;
 		    	if (canvas == null) {
 					_renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
 					_renderCanvas.Create();
@@ -57,7 +68,9 @@ public class RobBossEditor : EditorWindow {
 					canvasPath = Path.Combine(Directory.GetCurrentDirectory(), AssetDatabase.GetAssetPath(canvas.GetInstanceID()));
 					Graphics.Blit(canvas, _renderCanvas);
 			    }
-		    	paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], _renderCanvas);
+
+				Undo.RecordObject(window.paintTarget, "sets renderCanvas");
+		    	window.paintTarget.sharedMaterial.SetTexture(canvasName, _renderCanvas);
 			}
 			return _renderCanvas;
 		}
@@ -139,7 +152,7 @@ public class RobBossEditor : EditorWindow {
 		DestroyImmediate(colliderMesh);
 		DestroyImmediate(raycastTarget.gameObject);
 
-		if (paintTarget != null) EditorPrefs.SetInt("RobBoss.SelectionID", paintTarget.GetInstanceID());
+		if (hasPaintTarget) EditorPrefs.SetInt("RobBoss.SelectionID", paintTarget.GetInstanceID());
 		EditorPrefs.SetInt("RobBoss.Directional", directional ? 1 : 0);
 		EditorPrefs.SetString("RobBoss.Color", ColorUtility.ToHtmlStringRGBA(color));
 		EditorPrefs.SetFloat("RobBoss.Radius", radius);
@@ -175,7 +188,7 @@ public class RobBossEditor : EditorWindow {
 
 		int newCanvasID = EditorGUILayout.Popup("Canvas", canvasID, canvasNames);
 		if (newCanvasID != canvasID) {
-			ResetCanvas();
+			if (canvas != null || _renderCanvas != null) ResetCanvas();
 			canvasID = newCanvasID;
 		}
 		
@@ -185,11 +198,11 @@ public class RobBossEditor : EditorWindow {
 		radius = EditorGUILayout.FloatField("Radius", radius);
 		blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
-		GUI.enabled = (paintTarget != null);
+		GUI.enabled = hasPaintTarget;
 		if (!painting && GUILayout.Button("Start Painting")) {
 			painting = true;
 			SceneView.onSceneGUIDelegate += onSceneFunc;
-			Texture tex = paintTarget.sharedMaterial.GetTexture(canvasNames[canvasID]);
+			Texture tex = paintTarget.sharedMaterial.GetTexture(canvasName);
 			if (_renderCanvas != null && _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
 				ResetCanvas();
 			}
@@ -212,7 +225,7 @@ public class RobBossEditor : EditorWindow {
 			
 			GUI.enabled = (_renderCanvas != null);
 			if (GUILayout.Button("Save As")) {
-				string name = paintTarget.name + canvasNames[canvasID] + ".png";
+				string name = paintTarget.name + canvasName + ".png";
 				string path = EditorUtility.SaveFilePanel("Save texture as PNG", Application.dataPath, name, "png");
 				Save(path);
 			}
@@ -221,6 +234,8 @@ public class RobBossEditor : EditorWindow {
 
 	static void Save (string path) {
 		if (string.IsNullOrEmpty(path)) return;
+		
+		painting = false;
 		
 		canvas = new Texture2D(renderCanvas.width, renderCanvas.height);
 		RenderTexture.active = renderCanvas;
@@ -236,6 +251,7 @@ public class RobBossEditor : EditorWindow {
 		TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
 		importer.isReadable = true;
 		AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
 		ResetCanvas();
 	}
 
@@ -244,7 +260,9 @@ public class RobBossEditor : EditorWindow {
 			_renderCanvas.Release();
 			_renderCanvas = null;
 		}
-		paintTarget.sharedMaterial.SetTexture(canvasNames[canvasID], canvas);
+
+		Undo.RecordObject(window.paintTarget, "sets canvas");
+		window.paintTarget.sharedMaterial.SetTexture(canvasName, canvas);
 		canvas = null;
 		canvasPath = null;
 	}
@@ -267,7 +285,7 @@ public class RobBossEditor : EditorWindow {
 	static bool UpdateTarget() {
 		if (Selection.activeGameObject == null) return false;
 		Renderer r = Selection.activeGameObject.GetComponent<Renderer>();
-		if (r != paintTarget) {
+		if (r != window.paintTarget) {
 			SetPaintTarget(r);
 			return true;
 		}
@@ -277,20 +295,20 @@ public class RobBossEditor : EditorWindow {
 	static void SetPaintTarget (Renderer r) {
 		if (r == null) return;
 
-		paintTarget = r;
+		window.paintTarget = r;
 		UpdateCanvasNames();
 		colliderMesh.Clear();
 
-		if (paintTarget is MeshRenderer) {
-			MeshFilter f = paintTarget.GetComponent<MeshFilter>();
+		if (window.paintTarget is MeshRenderer) {
+			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
 			if (f != null && f.sharedMesh != null) {
 				colliderMesh.vertices = f.sharedMesh.vertices;
 				colliderMesh.uv = f.sharedMesh.uv;
 				colliderMesh.triangles = f.sharedMesh.triangles;
 			}
 		}
-		else if (paintTarget is SpriteRenderer) {
-			Sprite s = (paintTarget as SpriteRenderer).sprite;
+		else if (window.paintTarget is SpriteRenderer) {
+			Sprite s = (window.paintTarget as SpriteRenderer).sprite;
 			if (s != null) {
 				colliderMesh.vertices = Array.ConvertAll(s.vertices, (v) => (Vector3)v);
 				colliderMesh.uv = s.uv;
@@ -299,21 +317,21 @@ public class RobBossEditor : EditorWindow {
 		}
 
 		raycastTarget.sharedMesh = colliderMesh;
-		raycastTarget.transform.position = paintTarget.transform.position;
-		raycastTarget.transform.rotation = paintTarget.transform.rotation;
-		raycastTarget.transform.localScale = paintTarget.transform.localScale;
+		raycastTarget.transform.position = window.paintTarget.transform.position;
+		raycastTarget.transform.rotation = window.paintTarget.transform.rotation;
+		raycastTarget.transform.localScale = window.paintTarget.transform.localScale;
 	}
 
 	static void UpdateCanvasNames() {
 		List<string> names = new List<string>();
-		Shader shader = paintTarget.sharedMaterial.shader;
+		Shader shader = window.paintTarget.sharedMaterial.shader;
     	for (int i = 0; i < ShaderUtil.GetPropertyCount(shader); i++) {
 			if (ShaderUtil.IsShaderPropertyHidden(shader, i)) continue;
     		if (ShaderUtil.GetPropertyType(shader, i) == ShaderUtil.ShaderPropertyType.TexEnv) {
     			names.Add(ShaderUtil.GetPropertyName(shader, i));
 			}
     	}
-		canvasNames = names.ToArray();
+		window.canvasNames = names.ToArray();
 	}
 
 	static bool RaycastTarget(bool mouseMoved) {	
@@ -339,7 +357,7 @@ public class RobBossEditor : EditorWindow {
 
 			Handles.color = color;
 			Handles.DrawLine(hit.point, hit.point + hit.normal * 2);
-			Handles.DrawWireDisc(hit.point, hit.normal, radius * paintTarget.bounds.extents.y);
+			Handles.DrawWireDisc(hit.point, hit.normal, radius * window.paintTarget.bounds.extents.y);
 			HandleUtility.Repaint();
 
 			return true;
@@ -348,7 +366,7 @@ public class RobBossEditor : EditorWindow {
 	}
 
 	static void PaintTarget () {
-		if (paintTarget == null) return;
+		if (!hasPaintTarget) return;
 
 		Event e = Event.current;
 		if (e.modifiers != EventModifiers.None) return;
