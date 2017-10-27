@@ -52,6 +52,7 @@ public class RobBossEditor : EditorWindow {
 
 	static Texture2D canvasTexture;
 	static Mesh canvasMesh;
+	static string canvasMeshName;
 	static string canvasPath;
 	static RenderTexture _renderCanvas;
 	static RenderTexture renderCanvas {
@@ -168,6 +169,7 @@ public class RobBossEditor : EditorWindow {
 		if (canvasName == "Vertex") {
 			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
 			Mesh undoMesh = Instantiate(f.sharedMesh);
+			undoMesh.name = canvasMeshName;
 			undoMeshes.Add(undoMesh);
 		}
 		else {
@@ -181,9 +183,11 @@ public class RobBossEditor : EditorWindow {
 	}
 
 	void UndoRedo () {
+		if (paintTarget == null) return;
+
 		if (canvasName == "Vertex") {
 			int count = undoMeshes.Count;
-			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+			MeshFilter f = paintTarget.GetComponent<MeshFilter>();
 			if (count > 0) f.sharedMesh = undoMeshes[count-1];
 			else if (canvasMesh != null) f.sharedMesh = canvasMesh;
 		}
@@ -218,7 +222,8 @@ public class RobBossEditor : EditorWindow {
 			SceneView.onSceneGUIDelegate += onSceneFunc;
 			if (canvasID == 0) {
 				MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
-				f.sharedMesh = canvasMesh;
+				f.sharedMesh = Instantiate(f.sharedMesh);
+				f.sharedMesh.name = canvasMeshName;
 			}
 			else {
 				Texture tex = paintTarget.sharedMaterial.GetTexture(canvasName);
@@ -317,13 +322,15 @@ public class RobBossEditor : EditorWindow {
 	static void SetPaintTarget (MeshRenderer r) {
 		if (r == null) return;
 
+		Undo.RecordObject(window, "sets paint target");
 		window.paintTarget = r;
 		UpdateCanvasNames();
 		colliderMesh.Clear();
 
 		MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
 		if (f != null && f.sharedMesh != null) {
-			canvasMesh = Instantiate(f.sharedMesh);
+			canvasMeshName = f.sharedMesh.name;
+			canvasMesh = f.sharedMesh;
 			colliderMesh.vertices = f.sharedMesh.vertices;
 			colliderMesh.uv = f.sharedMesh.uv;
 			colliderMesh.triangles = f.sharedMesh.triangles;
@@ -338,6 +345,7 @@ public class RobBossEditor : EditorWindow {
 	static void UpdateCanvasNames() {
 		List<string> names = new List<string>();
 		names.Add("Vertex");
+		if (window.paintTarget == null) return;
 		Shader shader = window.paintTarget.sharedMaterial.shader;
     	for (int i = 0; i < ShaderUtil.GetPropertyCount(shader); i++) {
 			if (ShaderUtil.IsShaderPropertyHidden(shader, i)) continue;
