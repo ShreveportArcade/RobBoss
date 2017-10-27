@@ -141,8 +141,7 @@ public class RobBossEditor : EditorWindow {
 
 		directional = EditorPrefs.GetInt("RobBoss.Directional", 0) == 1;
 		string colorString = EditorPrefs.GetString("RobBoss.Color", "FFFFFFFF");
-		Debug.Log(colorString);
-		ColorUtility.TryParseHtmlString(colorString, out color);
+		ColorUtility.TryParseHtmlString("#" + colorString, out color);
 		radius = EditorPrefs.GetFloat("RobBoss.Radius", 0.5f);
 		blend = EditorPrefs.GetFloat("RobBoss.Blend", 0.1f);		
 	}
@@ -155,7 +154,6 @@ public class RobBossEditor : EditorWindow {
 		DestroyImmediate(raycastTarget.gameObject);
 
 		EditorPrefs.SetInt("RobBoss.Directional", directional ? 1 : 0);
-		Debug.Log(ColorUtility.ToHtmlStringRGBA(color));
 		EditorPrefs.SetString("RobBoss.Color", ColorUtility.ToHtmlStringRGBA(color));
 		EditorPrefs.SetFloat("RobBoss.Radius", radius);
 		EditorPrefs.SetFloat("RobBoss.Blend", blend);
@@ -168,7 +166,9 @@ public class RobBossEditor : EditorWindow {
 		Undo.RecordObject(window, "paints on canavs");
 			
 		if (canvasName == "Vertex") {
-			undoMeshes.Add(window.paintTarget.GetComponent<MeshFilter>().sharedMesh);
+			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+			Mesh undoMesh = Instantiate(f.sharedMesh);
+			undoMeshes.Add(undoMesh);
 		}
 		else {
 			Texture2D undoTex = new Texture2D(renderCanvas.width, renderCanvas.height);
@@ -202,7 +202,7 @@ public class RobBossEditor : EditorWindow {
 
 		int newCanvasID = EditorGUILayout.Popup("Canvas", canvasID, canvasNames);
 		if (newCanvasID != canvasID) {
-			if (canvasTexture != null || _renderCanvas != null) ResetCanvas();
+			if (canvasTexture != null || _renderCanvas != null) ResetRenderCanvas();
 			canvasID = newCanvasID;
 		}
 		
@@ -216,10 +216,14 @@ public class RobBossEditor : EditorWindow {
 		if (!painting && GUILayout.Button("Start Painting")) {
 			painting = true;
 			SceneView.onSceneGUIDelegate += onSceneFunc;
-			if (canvasID > 0) {
+			if (canvasID == 0) {
+				MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+				f.sharedMesh = canvasMesh;
+			}
+			else {
 				Texture tex = paintTarget.sharedMaterial.GetTexture(canvasName);
 				if (_renderCanvas != null && _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
-					ResetCanvas();
+					ResetRenderCanvas();
 				}
 			}
 		}
@@ -228,9 +232,11 @@ public class RobBossEditor : EditorWindow {
 			SceneView.onSceneGUIDelegate -= onSceneFunc;
 		}
 
+		if (canvasName == "Vertex") return;
+
 		GUI.enabled = (_renderCanvas != null);
 		if (GUILayout.Button("Reset")) {
-			ResetCanvas();
+			ResetRenderCanvas();
 		}
 
 		EditorGUILayout.BeginHorizontal();
@@ -268,10 +274,10 @@ public class RobBossEditor : EditorWindow {
 		importer.isReadable = true;
 		AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
 
-		ResetCanvas();
+		ResetRenderCanvas();
 	}
 
-	static void ResetCanvas () {
+	static void ResetRenderCanvas () {
 		if (_renderCanvas != null) {
 			_renderCanvas.Release();
 			_renderCanvas = null;
@@ -317,7 +323,7 @@ public class RobBossEditor : EditorWindow {
 
 		MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
 		if (f != null && f.sharedMesh != null) {
-			canvasMesh = f.sharedMesh;
+			canvasMesh = Instantiate(f.sharedMesh);
 			colliderMesh.vertices = f.sharedMesh.vertices;
 			colliderMesh.uv = f.sharedMesh.uv;
 			colliderMesh.triangles = f.sharedMesh.triangles;
