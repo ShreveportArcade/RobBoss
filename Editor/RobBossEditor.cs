@@ -212,8 +212,10 @@ public class RobBossEditor : EditorWindow {
 		
 		directional = EditorGUILayout.Toggle("Directional", directional);
 		if (canvasID > 0) brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
-		color = EditorGUILayout.ColorField("Color", color);		
-		radius = EditorGUILayout.FloatField("Radius", radius);
+		color = EditorGUILayout.ColorField("Color", color);	
+
+		string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";	
+		radius = EditorGUILayout.FloatField(radLabel, radius);
 		blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
 		GUI.enabled = hasPaintTarget;
@@ -393,7 +395,10 @@ public class RobBossEditor : EditorWindow {
 		if (!hasPaintTarget) return;
 
 		Event e = Event.current;
-		if (e.modifiers != EventModifiers.None) return;
+		if (e.modifiers != EventModifiers.None) {
+			GUIUtility.hotControl = 0;
+			return;
+		}
 
 		if (e.type == EventType.MouseDown) GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
 		
@@ -403,7 +408,10 @@ public class RobBossEditor : EditorWindow {
 				Mesh m = f.sharedMesh;
 				Vector3[] verts = m.vertices;
 				Color[] colors = m.colors;
-				if (colors.Length == 0) colors = new Color[verts.Length];
+				if (colors == null || colors.Length == 0) {
+					colors = new Color[canvasMesh.vertexCount];
+					for (int i = 0; i < canvasMesh.vertexCount; i++) canvasMesh.colors[i] = Color.white;
+				}
 				
 				for (int i = 0; i < verts.Length; i++) {
 					float d = (verts[i] - pos).sqrMagnitude;
