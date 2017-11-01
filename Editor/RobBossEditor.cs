@@ -237,7 +237,7 @@ public class RobBossEditor : EditorWindow {
 		else if (painting && GUILayout.Button("Stop Painting")) {
 			painting = false;
 			SceneView.onSceneGUIDelegate -= onSceneFunc;
-		}
+        }
 
 		if (canvasName == "Vertex") return;
 
@@ -302,7 +302,6 @@ public class RobBossEditor : EditorWindow {
 			PaintTarget();
 		}
 		else if (t == EventType.MouseUp) {
-            GUIUtility.hotControl = 0;
 			window.RegisterChange();
     	}
 	}
@@ -395,14 +394,10 @@ public class RobBossEditor : EditorWindow {
 		if (!hasPaintTarget) return;
 
 		Event e = Event.current;
-		if (e.modifiers != EventModifiers.None) {
-			GUIUtility.hotControl = 0;
-			return;
-		}
-
-		if (e.type == EventType.MouseDown) GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
+		if (e.modifiers != EventModifiers.None) return;
 		
 		if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
+			GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
 			if (canvasName == "Vertex") {
 				MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
 				Mesh m = f.sharedMesh;
@@ -428,6 +423,9 @@ public class RobBossEditor : EditorWindow {
 
 			e.Use();
 			didChange = true;
+        }
+		else {
+			GUIUtility.hotControl = 0;
         }
 	}
 }
