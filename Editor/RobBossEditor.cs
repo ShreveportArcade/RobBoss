@@ -123,7 +123,7 @@ public class RobBossEditor : EditorWindow {
 
 	[MenuItem ("Window/Rob Boss Painter")]
 	static void Open () {
-		window.minSize = new Vector2(250, 360);
+		window.minSize = new Vector2(250, 250);
 		window.Show();
 	}
 
@@ -229,7 +229,7 @@ public class RobBossEditor : EditorWindow {
 			}
 			else {
 				Texture tex = paintTarget.sharedMaterial.GetTexture(canvasName);
-				if (_renderCanvas != null && _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
+				if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
 					ResetRenderCanvas();
 				}
 			}
@@ -410,7 +410,7 @@ public class RobBossEditor : EditorWindow {
 				Color[] colors = m.colors;
 				if (colors == null || colors.Length == 0) {
 					colors = new Color[canvasMesh.vertexCount];
-					for (int i = 0; i < canvasMesh.vertexCount; i++) canvasMesh.colors[i] = Color.white;
+					for (int i = 0; i < canvasMesh.vertexCount; i++) colors[i] = Color.white;
 				}
 				
 				for (int i = 0; i < verts.Length; i++) {
