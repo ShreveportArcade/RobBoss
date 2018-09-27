@@ -18,7 +18,7 @@ Shader "Rob Boss/Brush" {
 		Lighting Off
 		ZWrite Off
 		Fog { Mode Off }
-		Blend SrcAlpha OneMinusSrcAlpha
+		Blend One OneMinusSrcAlpha
 
 		Pass {
 			CGPROGRAM

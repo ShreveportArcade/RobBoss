@@ -103,7 +103,7 @@ public class RobBossEditor : EditorWindow {
 						float x = i*0.0625f-1;
 						float y = j*0.0625f-1;
 						float a = Mathf.Clamp01(1-Mathf.Sqrt(x*x+y*y));
-						colors[(int)(j*32+i)] = new Color(1,1,1,a*a);
+						colors[j*32+i] = new Color(1,1,1,a*a);
 					}
 				}
 				_brushTexture.SetPixels(colors);
