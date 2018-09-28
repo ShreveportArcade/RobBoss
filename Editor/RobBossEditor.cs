@@ -144,7 +144,9 @@ public class RobBossEditor : EditorWindow {
 		string colorString = EditorPrefs.GetString("RobBoss.Color", "FFFFFFFF");
 		ColorUtility.TryParseHtmlString("#" + colorString, out color);
 		radius = EditorPrefs.GetFloat("RobBoss.Radius", 0.5f);
-		blend = EditorPrefs.GetFloat("RobBoss.Blend", 0.1f);		
+		blend = EditorPrefs.GetFloat("RobBoss.Blend", 0.1f);
+
+		if (paintTarget != null) SetPaintTarget(paintTarget);
 	}
 
     void OnDisable () {
@@ -275,7 +277,7 @@ public class RobBossEditor : EditorWindow {
 		AssetDatabase.Refresh();
 
 		canvasPath = path;
-		path = path.Replace(Application.dataPath, "Assets");
+		path = Path.GetFullPath(path).Replace(Path.GetFullPath(Application.dataPath), "Assets");
 		canvasTexture = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D)) as Texture2D;
 		TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
 		importer.isReadable = true;
@@ -291,9 +293,11 @@ public class RobBossEditor : EditorWindow {
 		}
 
 		Undo.RecordObject(window.paintTarget, "sets canvas");
-		window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
-		canvasTexture = null;
-		canvasPath = null;
+		if (canvasTexture != null) {
+			window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
+			canvasTexture = null;
+			canvasPath = null;
+		}
 	}
 
 	public static void OnSceneGUI(SceneView sceneview) {
