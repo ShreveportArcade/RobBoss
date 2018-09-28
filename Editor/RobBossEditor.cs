@@ -49,6 +49,7 @@ public class RobBossEditor : EditorWindow {
     static Mesh colliderMesh;
     static Vector2 uv;
     static Vector3 pos;
+    static Vector3 norm;
 
     static Texture2D canvasTexture;
     static Mesh canvasMesh;
@@ -368,6 +369,7 @@ public class RobBossEditor : EditorWindow {
         RaycastHit hit;
         if (raycastTarget.Raycast(ray, out hit, Mathf.Infinity)) {
             pos = window.paintTarget.transform.InverseTransformPoint(hit.point);
+            norm = window.paintTarget.transform.InverseTransformDirection(hit.normal);
             if (directional && mouseMoved) {
                 Vector2 dir = ((hit.textureCoord - uv).normalized + Vector2.one) * 0.5f;
                 color = new Color(dir.x, dir.y, 0, 1);
@@ -406,13 +408,15 @@ public class RobBossEditor : EditorWindow {
                 MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
                 Mesh m = f.sharedMesh;
                 Vector3[] verts = m.vertices;
+                Vector3[] norms = m.normals;
                 Color[] colors = m.colors;
                 if (colors == null || colors.Length == 0) {
                     colors = new Color[canvasMesh.vertexCount];
                     for (int i = 0; i < canvasMesh.vertexCount; i++) colors[i] = Color.white;
                 }
                 
-                for (int i = 0; i < verts.Length; i++) {
+                for (int i = verts.Length-1; i >= 0; i--) {
+                    if (Vector3.Dot(norms[i], norm) < 0) continue;
                     float d = (verts[i] - pos).sqrMagnitude;
                     if (d > radius * radius) continue;
                     colors[i] = Color.Lerp(colors[i], color, blend);
