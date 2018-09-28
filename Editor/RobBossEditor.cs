@@ -131,7 +131,7 @@ public class RobBossEditor : EditorWindow {
     static SceneView.OnSceneFunc onSceneFunc;
     void OnEnable () {
         Undo.undoRedoPerformed += UndoRedo;
-           if (onSceneFunc == null) onSceneFunc = new SceneView.OnSceneFunc(OnSceneGUI);
+        if (onSceneFunc == null) onSceneFunc = new SceneView.OnSceneFunc(OnSceneGUI);
 
         GameObject g = new GameObject("RobBossTarget");
         g.hideFlags = HideFlags.HideAndDontSave;
@@ -218,7 +218,7 @@ public class RobBossEditor : EditorWindow {
         color = EditorGUILayout.ColorField("Color", color);	
 
         string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";	
-        radius = EditorGUILayout.FloatField(radLabel, radius);
+        radius = Mathf.Max(0, EditorGUILayout.FloatField(radLabel, radius));
         blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
         GUI.enabled = hasPaintTarget;
@@ -226,7 +226,7 @@ public class RobBossEditor : EditorWindow {
             painting = true;
             SceneView.onSceneGUIDelegate += onSceneFunc;
             if (canvasID == 0) {
-                MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+                MeshFilter f = paintTarget.GetComponent<MeshFilter>();
                 f.sharedMesh = Instantiate(f.sharedMesh);
                 f.sharedMesh.name = canvasMeshName;
             }
@@ -363,7 +363,11 @@ public class RobBossEditor : EditorWindow {
     }
 
     static bool RaycastTarget(bool mouseMoved) {	
-        if (raycastTarget == null) return false;
+        if (raycastTarget == null || window.paintTarget == null) return false;
+
+        raycastTarget.transform.position = window.paintTarget.transform.position;
+        raycastTarget.transform.rotation = window.paintTarget.transform.rotation;
+        raycastTarget.transform.localScale = window.paintTarget.transform.localScale;
         
         Ray ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
         RaycastHit hit;
