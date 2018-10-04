@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEditor;
 
 public class RobBossEditor : EditorWindow {
@@ -35,6 +36,14 @@ public class RobBossEditor : EditorWindow {
         }
     }
 
+    public Dictionary<string, TextureDimension> canvasDimensions = new Dictionary<string, TextureDimension>();
+    static TextureDimension canvasDimension { 
+        get { 
+            if (canvasName == "Vertex" || window == null || !window.canvasDimensions.ContainsKey(canvasName)) return TextureDimension.None;
+            return window.canvasDimensions[canvasName];
+        }
+    }
+
     static bool painting = false;
     static bool hasPaintTarget {
         get { return window.paintTarget != null; }
@@ -51,7 +60,7 @@ public class RobBossEditor : EditorWindow {
     static Vector3 pos;
     static Vector3 norm;
 
-    static Texture2D canvasTexture;
+    static Texture canvasTexture;
     static Mesh canvasMesh;
     static string canvasMeshName;
     static string canvasPath;
@@ -60,16 +69,20 @@ public class RobBossEditor : EditorWindow {
         get {
             if (!hasPaintTarget) return null;
             if (_renderCanvas == null) {
-                canvasTexture = window.paintTarget.sharedMaterial.GetTexture(canvasName) as Texture2D;
+                canvasTexture = window.paintTarget.sharedMaterial.GetTexture(canvasName);
 
                 if (canvasTexture == null) {
-                    _renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
+                    int px = 2048;
+                    if (canvasDimension == TextureDimension.Cube) px = 256;
+                    _renderCanvas = new RenderTexture(px, px, 0, RenderTextureFormat.ARGB32);
+                    _renderCanvas.dimension = canvasDimension;
                     _renderCanvas.Create();
                     canvasPath = null;
                     Graphics.Blit(Texture2D.whiteTexture, _renderCanvas);
                 }
                 else {
                     _renderCanvas = new RenderTexture(canvasTexture.width, canvasTexture.height, 0, RenderTextureFormat.ARGB32);
+                    _renderCanvas.dimension = canvasDimension;
                     _renderCanvas.Create();
                     canvasPath = Path.Combine(Directory.GetCurrentDirectory(), AssetDatabase.GetAssetPath(canvasTexture.GetInstanceID()));
                     Graphics.Blit(canvasTexture, _renderCanvas);
@@ -269,17 +282,18 @@ public class RobBossEditor : EditorWindow {
         
         painting = false;
         
-        canvasTexture = new Texture2D(renderCanvas.width, renderCanvas.height);
+        Texture2D canvasTexture2D = new Texture2D(renderCanvas.width, renderCanvas.height);
         RenderTexture.active = renderCanvas;
-        canvasTexture.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
-        canvasTexture.Apply();
+        canvasTexture2D.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
+        canvasTexture2D.Apply();
         RenderTexture.active = null;
-        File.WriteAllBytes(path, canvasTexture.EncodeToPNG());
+        File.WriteAllBytes(path, canvasTexture2D.EncodeToPNG());
         AssetDatabase.Refresh();
 
         canvasPath = path;
         path = Path.GetFullPath(path).Replace(Path.GetFullPath(Application.dataPath), "Assets");
-        canvasTexture = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D)) as Texture2D;
+        canvasTexture2D = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D)) as Texture2D;
+        canvasTexture = canvasTexture2D as Texture;
         TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
         importer.isReadable = true;
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
@@ -294,7 +308,7 @@ public class RobBossEditor : EditorWindow {
         }
 
         Undo.RecordObject(window.paintTarget, "sets canvas");
-        if (canvasTexture != null) {
+        if (canvasTexture != null && canvasTexture.dimension == canvasDimension) {
             window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
             canvasTexture = null;
             canvasPath = null;
@@ -349,6 +363,7 @@ public class RobBossEditor : EditorWindow {
     }
 
     static void UpdateCanvasNames() {
+        window.canvasDimensions.Clear();
         List<string> names = new List<string>();
         names.Add("Vertex");
         if (window.paintTarget == null) return;
@@ -356,7 +371,9 @@ public class RobBossEditor : EditorWindow {
         for (int i = 0; i < ShaderUtil.GetPropertyCount(shader); i++) {
             if (ShaderUtil.IsShaderPropertyHidden(shader, i)) continue;
             if (ShaderUtil.GetPropertyType(shader, i) == ShaderUtil.ShaderPropertyType.TexEnv) {
-                names.Add(ShaderUtil.GetPropertyName(shader, i));
+                string name = ShaderUtil.GetPropertyName(shader, i);
+                names.Add(name);
+                window.canvasDimensions[name] = ShaderUtil.GetTexDim(shader, i);
             }
         }
         window.canvasNames = names.ToArray();

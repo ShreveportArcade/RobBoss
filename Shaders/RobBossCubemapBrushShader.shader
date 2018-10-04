@@ -8,11 +8,10 @@ Shader "Rob Boss/Cubemap Brush" {
 	SubShader {
 		Tags { "Queue"="Background" "RenderType"="Transparent" } 
 
-		Cull Front
 		Lighting Off
 		ZWrite Off
 		Fog { Mode Off }
-		// Blend One OneMinusSrcAlpha
+		Blend One OneMinusSrcAlpha
 
 		Pass {
 			CGPROGRAM
@@ -30,8 +29,7 @@ Shader "Rob Boss/Cubemap Brush" {
 				v2f vert(appdata_base v) {
 					v2f o;
 					o.vertex = UnityObjectToClipPos(v.vertex);
-					// o.viewDir = -WorldSpaceViewDir(v.vertex);
-					o.viewDir = normalize(v.vertex);
+					o.viewDir = -WorldSpaceViewDir(v.vertex);
 					return o;
 				}
 			
@@ -46,7 +44,7 @@ Shader "Rob Boss/Cubemap Brush" {
 						_Transform.x * IN.viewDir.x + _Transform.z * IN.viewDir.z
 					);
 					float y = asin(IN.viewDir.y - _Transform.y);
-					float2 uv = float2(x,y) / _Transform.w;
+					float2 uv = float2(x,y) / _Transform.w + float2(0.5,0.5);
 
 					float4 canvas = texCUBE(_MainTex, IN.viewDir);
 					float4 brush = tex2D(_Brush, uv) * _Color;
