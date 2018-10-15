@@ -165,7 +165,7 @@ public class RobBossEditor : EditorWindow {
 
     static bool didChange = false;
     void RegisterChange () {
-        if (!didChange) return;
+        if (!didChange || window.paintTarget == null) return;
         didChange = false;
         Undo.RecordObject(window, "paints on canavs");
             
@@ -225,17 +225,7 @@ public class RobBossEditor : EditorWindow {
         if (!painting && GUILayout.Button("Start Painting")) {
             painting = true;
             SceneView.onSceneGUIDelegate += onSceneFunc;
-            if (canvasID == 0) {
-                MeshFilter f = paintTarget.GetComponent<MeshFilter>();
-                f.sharedMesh = Instantiate(f.sharedMesh);
-                f.sharedMesh.name = canvasMeshName;
-            }
-            else {
-                Texture tex = paintTarget.sharedMaterial.GetTexture(canvasName);
-                if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
-                    ResetRenderCanvas();
-                }
-            }
+            SetupPainting();
         }
         else if (painting && GUILayout.Button("Stop Painting")) {
             painting = false;
@@ -263,6 +253,20 @@ public class RobBossEditor : EditorWindow {
             }
         EditorGUILayout.EndHorizontal();
     }
+
+	static void SetupPainting () {
+		if (window.canvasID == 0) {
+			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+			f.sharedMesh = Instantiate(f.sharedMesh);
+			f.sharedMesh.name = canvasMeshName;
+		}
+		else {
+			Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
+			if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
+				ResetRenderCanvas();
+			}
+		}
+	}
 
     static void Save (string path) {
         if (string.IsNullOrEmpty(path)) return;
@@ -330,6 +334,7 @@ public class RobBossEditor : EditorWindow {
 
         Undo.RecordObject(window, "sets paint target");
         window.paintTarget = r;
+		if (painting) SetupPainting();
         UpdateCanvasNames();
         colliderMesh.Clear();
 
