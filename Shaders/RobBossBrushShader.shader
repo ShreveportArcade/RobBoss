@@ -4,6 +4,8 @@ Shader "Rob Boss/Brush" {
 		_Brush ("Brush", 2D) = "white" {}
 		_Color ("Color", Color) = (1,1,1,1)
 		_Transform ("UV Coord (X,Y) Angle (Z) Size (W)", Vector) = (0, 0, 0, 1)
+		_SrcBlend ("Source Blend Mode", Float) = 1
+        _DstBlend ("Destination Blend Mode", Float) = 10
 	}
 	SubShader {
 		Tags { 
@@ -18,8 +20,8 @@ Shader "Rob Boss/Brush" {
 		Lighting Off
 		ZWrite Off
 		Fog { Mode Off }
-		Blend One OneMinusSrcAlpha
-
+		Blend [_SrcBlend] [_DstBlend]
+		
 		Pass {
 			CGPROGRAM
 				#pragma vertex vert

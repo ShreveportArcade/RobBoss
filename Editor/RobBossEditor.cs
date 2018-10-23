@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using UnityEngine.Rendering;
 
 public class RobBossEditor : EditorWindow {
 
@@ -35,12 +36,14 @@ public class RobBossEditor : EditorWindow {
         }
     }
 
+    enum PaintType { Normal, Directional, Add, Subtract, Multiply }
+    static PaintType paintType = PaintType.Normal;
+
     static bool painting = false;
     static bool hasPaintTarget {
         get { return window.paintTarget != null; }
     }
 
-    static bool directional = false;
     static Color color = Color.white;
     static float radius = 0.5f;
     static float blend = 0.1f;
@@ -141,7 +144,7 @@ public class RobBossEditor : EditorWindow {
         colliderMesh.hideFlags = HideFlags.HideAndDontSave;
         raycastTarget.sharedMesh = colliderMesh;
 
-        directional = EditorPrefs.GetInt("RobBoss.Directional", 0) == 1;
+        paintType = (PaintType)EditorPrefs.GetInt("RobBoss.PaintType", 0);
         string colorString = EditorPrefs.GetString("RobBoss.Color", "FFFFFFFF");
         ColorUtility.TryParseHtmlString("#" + colorString, out color);
         radius = EditorPrefs.GetFloat("RobBoss.Radius", 0.5f);
@@ -157,7 +160,7 @@ public class RobBossEditor : EditorWindow {
         DestroyImmediate(colliderMesh);
         DestroyImmediate(raycastTarget.gameObject);
 
-        EditorPrefs.SetInt("RobBoss.Directional", directional ? 1 : 0);
+        EditorPrefs.SetInt("RobBoss.PaintType", (int)paintType);
         EditorPrefs.SetString("RobBoss.Color", ColorUtility.ToHtmlStringRGBA(color));
         EditorPrefs.SetFloat("RobBoss.Radius", radius);
         EditorPrefs.SetFloat("RobBoss.Blend", blend);
@@ -212,8 +215,28 @@ public class RobBossEditor : EditorWindow {
             if (canvasTexture != null || _renderCanvas != null) ResetRenderCanvas();
             canvasID = newCanvasID;
         }
+
+        paintType = (PaintType)EditorGUILayout.EnumPopup("Paint Type", paintType);
+        switch (paintType) {
+            case PaintType.Normal:
+            case PaintType.Directional:
+                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.One);
+                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                break;
+            case PaintType.Add:
+                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.One);
+                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+                break;
+            case PaintType.Subtract:
+                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.OneMinusSrcColor);
+                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+                break;
+            case PaintType.Multiply:
+                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.DstColor);
+                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.Zero);
+                break;
+        }
         
-        directional = EditorGUILayout.Toggle("Directional", directional);
         if (canvasID > 0) brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
         color = EditorGUILayout.ColorField("Color", color);	
 
@@ -380,12 +403,12 @@ public class RobBossEditor : EditorWindow {
         if (raycastTarget.Raycast(ray, out hit, Mathf.Infinity)) {
             pos = window.paintTarget.transform.InverseTransformPoint(hit.point);
             norm = window.paintTarget.transform.InverseTransformDirection(hit.normal);
-            if (directional && mouseMoved) {
+            if (paintType == PaintType.Directional && mouseMoved) {
                 Vector2 dir = ((hit.textureCoord - uv).normalized + Vector2.one) * 0.5f;
                 color = new Color(dir.x, dir.y, 0, 1);
                 uv = hit.textureCoord;
             }
-            else if (!directional) {
+            else if (paintType != PaintType.Directional) {
                 uv = hit.textureCoord;
             }
 
@@ -429,7 +452,23 @@ public class RobBossEditor : EditorWindow {
                     if (Vector3.Dot(norms[i], norm) < 0) continue;
                     float d = (verts[i] - pos).sqrMagnitude;
                     if (d > radius * radius) continue;
-                    colors[i] = Color.Lerp(colors[i], color, blend);
+                    Color newColor = color;
+                    switch (paintType) {
+                        case PaintType.Normal:
+                        case PaintType.Directional:
+                            newColor = color;
+                            break;
+                        case PaintType.Add:
+                            newColor = colors[i] + color;
+                            break;
+                        case PaintType.Subtract:
+                            newColor = colors[i] - color;
+                            break;
+                        case PaintType.Multiply:
+                            newColor = colors[i] * color;
+                            break;
+                    }
+                    colors[i] = Color.Lerp(colors[i], newColor, blend);
                 }
 
                 m.colors = colors;
