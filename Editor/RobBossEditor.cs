@@ -367,7 +367,8 @@ public class RobBossEditor : EditorWindow {
         window.canvasNames = names.ToArray();
     }
 
-    static bool RaycastTarget(bool mouseMoved) {	
+    static bool RaycastTarget(bool mouseMoved) {
+        if (!(EditorWindow.mouseOverWindow is SceneView)) return false;	
         if (raycastTarget == null || window.paintTarget == null) return false;
 
         raycastTarget.transform.position = window.paintTarget.transform.position;
