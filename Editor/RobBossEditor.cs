@@ -47,6 +47,7 @@ public class RobBossEditor : EditorWindow {
     }
 
     static Color color = Color.white;
+    static AnimationCurve falloff = AnimationCurve.EaseInOut(0, 1, 1, 0);
     static float radius = 0.5f;
     static float blend = 0.1f;
 
@@ -178,11 +179,10 @@ public class RobBossEditor : EditorWindow {
         Undo.RecordObject(window, "paints on canavs");
             
         if (canvasName == "Vertex") {
-            previewMesh = CopyMesh();
+            prevMesh = CopyMesh();
             undoMeshes.Add(CopyMesh());
         }
         else {
-            previewTexture = CopyTexture();
             undoTextures.Add(CopyTexture());
         }
     }
@@ -211,18 +211,15 @@ public class RobBossEditor : EditorWindow {
             MeshFilter f = paintTarget.GetComponent<MeshFilter>();
             if (count > 0) f.sharedMesh = undoMeshes[count-1];
             else if (canvasMesh != null) f.sharedMesh = canvasMesh;
-            previewMesh = CopyMesh();
+            prevMesh = CopyMesh();
         }
         else {
-            int count = undoTextures.Count;
-            if (count > 0) Graphics.Blit(undoTextures[count-1], renderCanvas);
-            else if (canvasTexture != null) Graphics.Blit(canvasTexture, renderCanvas);
-            else Graphics.Blit(Texture2D.whiteTexture, renderCanvas);
-            previewTexture = CopyTexture();
+            Graphics.Blit(prevTexture, renderCanvas);
         }
     }
 
     void SceneClosed(Scene scene) {
+        painting = false;
         if (paintTarget == null) {
             undoMeshes.Clear();
             undoTextures.Clear();
@@ -261,7 +258,8 @@ public class RobBossEditor : EditorWindow {
                 break;
         }
         
-        if (canvasID > 0) brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
+        if (canvasID == 0) falloff = EditorGUILayout.CurveField("Falloff", falloff, Color.white, Rect.MinMaxRect(0,0,1,1));
+        else brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
         color = EditorGUILayout.ColorField("Color", color); 
 
         string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";  
@@ -301,20 +299,26 @@ public class RobBossEditor : EditorWindow {
         EditorGUILayout.EndHorizontal();
     }
 
-    static Mesh previewMesh;
-    static Texture2D previewTexture;
+    static Mesh prevMesh;
+    static Texture2D prevTexture {
+        get {
+            int count = window.undoTextures.Count;
+            if (count > 0) return window.undoTextures[count-1];
+            else if (canvasTexture != null) return canvasTexture;
+            else return Texture2D.whiteTexture;
+        }
+    }
     static void SetupPainting () {
         if (window.canvasID == 0) {
             MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
             f.sharedMesh = CopyMesh();
-            previewMesh = CopyMesh();
+            prevMesh = CopyMesh();
         }
         else {
             Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
             if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
                 ResetRenderCanvas();
             }
-            previewTexture = CopyTexture();
         }
     }
 
@@ -464,10 +468,8 @@ public class RobBossEditor : EditorWindow {
         Event e = Event.current;
         if (e.modifiers != EventModifiers.None) return;
         
-        bool isPreview = true;
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
-            isPreview = false;
             e.Use();
             didChange = true;
         }
@@ -477,8 +479,8 @@ public class RobBossEditor : EditorWindow {
     
         if (canvasName == "Vertex") {
             MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
-            Mesh m = previewMesh;
-            if (isPreview) m = Instantiate(previewMesh);
+            Mesh m = prevMesh;
+            if (!didChange) m = Instantiate(prevMesh);
 
             Vector3[] verts = m.vertices;
             Vector3[] norms = m.normals;
@@ -491,7 +493,9 @@ public class RobBossEditor : EditorWindow {
             for (int i = verts.Length-1; i >= 0; i--) {
                 if (Vector3.Dot(norms[i], norm) < 0) continue;
                 float d = (verts[i] - pos).sqrMagnitude;
-                if (d > radius * radius) continue;
+                float r = radius * radius;
+                if (d > r) continue;
+                float b = blend * falloff.Evaluate(d / r);
                 Color newColor = color;
                 switch (paintType) {
                     case PaintType.Normal:
@@ -508,14 +512,14 @@ public class RobBossEditor : EditorWindow {
                         newColor = colors[i] * color;
                         break;
                 }
-                colors[i] = Color.Lerp(colors[i], newColor, blend);
+                colors[i] = Color.Lerp(colors[i], newColor, b);
             }
 
             m.colors = colors;
             f.sharedMesh = m;
         }
         else {
-            if (isPreview) return;// Graphics.Blit(previewTexture, renderCanvas);
+            if (!didChange) return;//Graphics.Blit(prevTexture, renderCanvas);
             Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
         }
     }
