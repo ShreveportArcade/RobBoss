@@ -178,19 +178,29 @@ public class RobBossEditor : EditorWindow {
         Undo.RecordObject(window, "paints on canavs");
             
         if (canvasName == "Vertex") {
-            MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
-            Mesh undoMesh = Instantiate(f.sharedMesh);
-            undoMesh.name = canvasMeshName;
-            undoMeshes.Add(undoMesh);
+            previewMesh = CopyMesh();
+            undoMeshes.Add(CopyMesh());
         }
         else {
-            Texture2D undoTex = new Texture2D(renderCanvas.width, renderCanvas.height);
-            RenderTexture.active = renderCanvas;
-            undoTex.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
-            undoTex.Apply();
-            RenderTexture.active = null;
-            undoTextures.Add(undoTex);
+            previewTexture = CopyTexture();
+            undoTextures.Add(CopyTexture());
         }
+    }
+
+    static Mesh CopyMesh () {
+        MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+        Mesh m = Instantiate(f.sharedMesh);
+        m.name = canvasMeshName;
+        return m;
+    }
+
+    static Texture2D CopyTexture () {
+        Texture2D t = new Texture2D(renderCanvas.width, renderCanvas.height);
+        RenderTexture.active = renderCanvas;
+        t.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
+        t.Apply();
+        RenderTexture.active = null;
+        return t;
     }
 
     void UndoRedo () {
@@ -201,12 +211,14 @@ public class RobBossEditor : EditorWindow {
             MeshFilter f = paintTarget.GetComponent<MeshFilter>();
             if (count > 0) f.sharedMesh = undoMeshes[count-1];
             else if (canvasMesh != null) f.sharedMesh = canvasMesh;
+            previewMesh = CopyMesh();
         }
         else {
             int count = undoTextures.Count;
             if (count > 0) Graphics.Blit(undoTextures[count-1], renderCanvas);
             else if (canvasTexture != null) Graphics.Blit(canvasTexture, renderCanvas);
             else Graphics.Blit(Texture2D.whiteTexture, renderCanvas);
+            previewTexture = CopyTexture();
         }
     }
 
@@ -250,9 +262,9 @@ public class RobBossEditor : EditorWindow {
         }
         
         if (canvasID > 0) brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
-        color = EditorGUILayout.ColorField("Color", color);	
+        color = EditorGUILayout.ColorField("Color", color); 
 
-        string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";	
+        string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";  
         radius = Mathf.Max(0, EditorGUILayout.FloatField(radLabel, radius));
         blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
 
@@ -289,19 +301,22 @@ public class RobBossEditor : EditorWindow {
         EditorGUILayout.EndHorizontal();
     }
 
-	static void SetupPainting () {
-		if (window.canvasID == 0) {
-			MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
-			f.sharedMesh = Instantiate(f.sharedMesh);
-			f.sharedMesh.name = canvasMeshName;
-		}
-		else {
-			Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
-			if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
-				ResetRenderCanvas();
-			}
-		}
-	}
+    static Mesh previewMesh;
+    static Texture2D previewTexture;
+    static void SetupPainting () {
+        if (window.canvasID == 0) {
+            MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+            f.sharedMesh = CopyMesh();
+            previewMesh = CopyMesh();
+        }
+        else {
+            Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
+            if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
+                ResetRenderCanvas();
+            }
+            previewTexture = CopyTexture();
+        }
+    }
 
     static void Save (string path) {
         if (string.IsNullOrEmpty(path)) return;
@@ -371,7 +386,7 @@ public class RobBossEditor : EditorWindow {
 
         Undo.RecordObject(window, "sets paint target");
         window.paintTarget = r;
-		if (painting) SetupPainting();
+        if (painting) SetupPainting();
         UpdateCanvasNames();
         colliderMesh.Clear();
 
@@ -405,7 +420,7 @@ public class RobBossEditor : EditorWindow {
     }
 
     static bool RaycastTarget(bool mouseMoved) {
-        if (!(EditorWindow.mouseOverWindow is SceneView)) return false;	
+        if (!(EditorWindow.mouseOverWindow is SceneView)) return false; 
         if (raycastTarget == null || window.paintTarget == null) return false;
 
         raycastTarget.transform.position = window.paintTarget.transform.position;
@@ -449,54 +464,59 @@ public class RobBossEditor : EditorWindow {
         Event e = Event.current;
         if (e.modifiers != EventModifiers.None) return;
         
+        bool isPreview = true;
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
-            if (canvasName == "Vertex") {
-                MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
-                Mesh m = f.sharedMesh;
-                Vector3[] verts = m.vertices;
-                Vector3[] norms = m.normals;
-                Color[] colors = m.colors;
-                if (colors == null || colors.Length == 0) {
-                    colors = new Color[canvasMesh.vertexCount];
-                    for (int i = 0; i < canvasMesh.vertexCount; i++) colors[i] = Color.white;
-                }
-                
-                for (int i = verts.Length-1; i >= 0; i--) {
-                    if (Vector3.Dot(norms[i], norm) < 0) continue;
-                    float d = (verts[i] - pos).sqrMagnitude;
-                    if (d > radius * radius) continue;
-                    Color newColor = color;
-                    switch (paintType) {
-                        case PaintType.Normal:
-                        case PaintType.Directional:
-                            newColor = color;
-                            break;
-                        case PaintType.Add:
-                            newColor = colors[i] + color;
-                            break;
-                        case PaintType.Subtract:
-                            newColor = colors[i] - color;
-                            break;
-                        case PaintType.Multiply:
-                            newColor = colors[i] * color;
-                            break;
-                    }
-                    colors[i] = Color.Lerp(colors[i], newColor, blend);
-                }
-
-                m.colors = colors;
-                f.sharedMesh = m;
-            }
-            else {
-                Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
-            }
-
+            isPreview = false;
             e.Use();
             didChange = true;
         }
         else {
             GUIUtility.hotControl = 0;
+        }
+    
+        if (canvasName == "Vertex") {
+            MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+            Mesh m = previewMesh;
+            if (isPreview) m = Instantiate(previewMesh);
+
+            Vector3[] verts = m.vertices;
+            Vector3[] norms = m.normals;
+            Color[] colors = m.colors;
+            if (colors == null || colors.Length == 0) {
+                colors = new Color[canvasMesh.vertexCount];
+                for (int i = 0; i < canvasMesh.vertexCount; i++) colors[i] = Color.white;
+            }
+            
+            for (int i = verts.Length-1; i >= 0; i--) {
+                if (Vector3.Dot(norms[i], norm) < 0) continue;
+                float d = (verts[i] - pos).sqrMagnitude;
+                if (d > radius * radius) continue;
+                Color newColor = color;
+                switch (paintType) {
+                    case PaintType.Normal:
+                    case PaintType.Directional:
+                        newColor = color;
+                        break;
+                    case PaintType.Add:
+                        newColor = colors[i] + color;
+                        break;
+                    case PaintType.Subtract:
+                        newColor = colors[i] - color;
+                        break;
+                    case PaintType.Multiply:
+                        newColor = colors[i] * color;
+                        break;
+                }
+                colors[i] = Color.Lerp(colors[i], newColor, blend);
+            }
+
+            m.colors = colors;
+            f.sharedMesh = m;
+        }
+        else {
+            if (isPreview) return;// Graphics.Blit(previewTexture, renderCanvas);
+            Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
         }
     }
 }
