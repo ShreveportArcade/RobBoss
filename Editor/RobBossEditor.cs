@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.Rendering;
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
 
 public class RobBossEditor : EditorWindow {
 
@@ -134,6 +136,8 @@ public class RobBossEditor : EditorWindow {
     static SceneView.OnSceneFunc onSceneFunc;
     void OnEnable () {
         Undo.undoRedoPerformed += UndoRedo;
+        EditorSceneManager.sceneClosed += SceneClosed;
+
         if (onSceneFunc == null) onSceneFunc = new SceneView.OnSceneFunc(OnSceneGUI);
 
         GameObject g = new GameObject("RobBossTarget");
@@ -155,6 +159,7 @@ public class RobBossEditor : EditorWindow {
 
     void OnDisable () {
         Undo.undoRedoPerformed -= UndoRedo;
+        EditorSceneManager.sceneClosed -= SceneClosed;
         if (painting) SceneView.onSceneGUIDelegate -= onSceneFunc;
 
         DestroyImmediate(colliderMesh);
@@ -190,7 +195,7 @@ public class RobBossEditor : EditorWindow {
 
     void UndoRedo () {
         if (paintTarget == null) return;
-
+        
         if (canvasName == "Vertex") {
             int count = undoMeshes.Count;
             MeshFilter f = paintTarget.GetComponent<MeshFilter>();
@@ -202,6 +207,13 @@ public class RobBossEditor : EditorWindow {
             if (count > 0) Graphics.Blit(undoTextures[count-1], renderCanvas);
             else if (canvasTexture != null) Graphics.Blit(canvasTexture, renderCanvas);
             else Graphics.Blit(Texture2D.whiteTexture, renderCanvas);
+        }
+    }
+
+    void SceneClosed(Scene scene) {
+        if (paintTarget == null) {
+            undoMeshes.Clear();
+            undoTextures.Clear();
         }
     }
 
@@ -320,9 +332,11 @@ public class RobBossEditor : EditorWindow {
             _renderCanvas = null;
         }
 
-        Undo.RecordObject(window.paintTarget, "sets canvas");
         if (canvasTexture != null) {
-            window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
+            if (window.paintTarget != null) {
+                Undo.RecordObject(window.paintTarget, "sets canvas");
+                window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
+            }
             canvasTexture = null;
             canvasPath = null;
         }
