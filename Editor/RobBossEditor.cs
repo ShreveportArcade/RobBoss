@@ -485,6 +485,7 @@ public class RobBossEditor : EditorWindow {
         float pressure = Mathf.Pow(e.pressure, 10);
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
+            if (canvasName != "Vertex") Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
             e.Use();
             didChange = true;
             if ((int)pressureType == 0) pressure = 1;
@@ -540,9 +541,6 @@ public class RobBossEditor : EditorWindow {
             m.colors = colors;
             f.sharedMesh = m;
         }
-        else {
-            if (!didChange) return;//Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
-            Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
-        }
+        // else if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
     }
 }
