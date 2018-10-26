@@ -38,6 +38,8 @@ public class RobBossEditor : EditorWindow {
         }
     }
 
+    enum PressureType { Opacity = 1, Size = 2 }
+    static PressureType pressureType = (PressureType)0;
     enum PaintType { Normal, Directional, Add, Subtract, Multiply }
     static PaintType paintType = PaintType.Normal;
 
@@ -236,6 +238,8 @@ public class RobBossEditor : EditorWindow {
             if (canvasTexture != null || _renderCanvas != null) ResetRenderCanvas();
             canvasID = newCanvasID;
         }
+
+        pressureType = (PressureType)EditorGUILayout.EnumMaskField("Pressure Type", pressureType);
 
         paintType = (PaintType)EditorGUILayout.EnumPopup("Paint Type", paintType);
         switch (paintType) {
@@ -466,15 +470,19 @@ public class RobBossEditor : EditorWindow {
         if (!hasPaintTarget) return;
 
         Event e = Event.current;
+
         if (e.modifiers != EventModifiers.None) return;
         
+        float pressure = Mathf.Pow(e.pressure, 10);
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
             e.Use();
             didChange = true;
+            if ((int)pressureType == 0) pressure = 1;
         }
         else {
             GUIUtility.hotControl = 0;
+            pressure = 1;
         }
     
         if (canvasName == "Vertex") {
@@ -494,8 +502,10 @@ public class RobBossEditor : EditorWindow {
                 if (Vector3.Dot(norms[i], norm) < 0) continue;
                 float d = (verts[i] - pos).sqrMagnitude;
                 float r = radius * radius;
+                if (((int)pressureType & (int)PressureType.Size) == (int)PressureType.Size) r *= pressure;
                 if (d > r) continue;
                 float b = blend * falloff.Evaluate(d / r);
+                if (((int)pressureType & (int)PressureType.Opacity) == (int)PressureType.Opacity) b *= pressure;
                 Color newColor = color;
                 switch (paintType) {
                     case PaintType.Normal:
@@ -519,7 +529,7 @@ public class RobBossEditor : EditorWindow {
             f.sharedMesh = m;
         }
         else {
-            if (!didChange) return;//Graphics.Blit(prevTexture, renderCanvas);
+            if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
             Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
         }
     }
