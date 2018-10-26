@@ -376,7 +376,8 @@ public class RobBossEditor : EditorWindow {
 
     public static void OnSceneGUI(SceneView sceneview) {
         EventType t = Event.current.type;
-        if (painting && t != EventType.MouseUp && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
+        bool canPaint = (t != EventType.MouseUp && t != EventType.Repaint && t != EventType.Layout);
+        if (painting && canPaint && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
             PaintTarget();
         }
         else if (t == EventType.MouseUp) {
@@ -481,11 +482,9 @@ public class RobBossEditor : EditorWindow {
         Event e = Event.current;
 
         if (e.modifiers != EventModifiers.None) return;
-        
         float pressure = Mathf.Pow(e.pressure, 10);
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
-            if (canvasName != "Vertex") Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
             e.Use();
             didChange = true;
             if ((int)pressureType == 0) pressure = 1;
@@ -541,6 +540,9 @@ public class RobBossEditor : EditorWindow {
             m.colors = colors;
             f.sharedMesh = m;
         }
-        // else if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
+        else {
+            if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
+            else Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
+        }
     }
 }
