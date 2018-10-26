@@ -72,12 +72,14 @@ public class RobBossEditor : EditorWindow {
 
                 if (canvasTexture == null) {
                     _renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
+                    _renderCanvas.wrapMode = TextureWrapMode.Repeat;
                     _renderCanvas.Create();
                     canvasPath = null;
                     Graphics.Blit(Texture2D.whiteTexture, _renderCanvas);
                 }
                 else {
                     _renderCanvas = new RenderTexture(canvasTexture.width, canvasTexture.height, 0, RenderTextureFormat.ARGB32);
+                    _renderCanvas.wrapMode = canvasTexture.wrapMode;
                     _renderCanvas.Create();
                     canvasPath = Path.Combine(Directory.GetCurrentDirectory(), AssetDatabase.GetAssetPath(canvasTexture.GetInstanceID()));
                     Graphics.Blit(canvasTexture, _renderCanvas);
@@ -181,7 +183,7 @@ public class RobBossEditor : EditorWindow {
         Undo.RecordObject(window, "paints on canavs");
             
         if (canvasName == "Vertex") {
-            prevMesh = CopyMesh();
+            _prevMesh = CopyMesh();
             undoMeshes.Add(CopyMesh());
         }
         else {
@@ -198,6 +200,7 @@ public class RobBossEditor : EditorWindow {
 
     static Texture2D CopyTexture () {
         Texture2D t = new Texture2D(renderCanvas.width, renderCanvas.height);
+        t.wrapMode = renderCanvas.wrapMode;
         RenderTexture.active = renderCanvas;
         t.ReadPixels(new Rect(0, 0, renderCanvas.width, renderCanvas.height), 0, 0);
         t.Apply();
@@ -213,7 +216,7 @@ public class RobBossEditor : EditorWindow {
             MeshFilter f = paintTarget.GetComponent<MeshFilter>();
             if (count > 0) f.sharedMesh = undoMeshes[count-1];
             else if (canvasMesh != null) f.sharedMesh = canvasMesh;
-            prevMesh = CopyMesh();
+            _prevMesh = CopyMesh();
         }
         else {
             Graphics.Blit(prevTexture, renderCanvas);
@@ -303,7 +306,13 @@ public class RobBossEditor : EditorWindow {
         EditorGUILayout.EndHorizontal();
     }
 
-    static Mesh prevMesh;
+    static Mesh _prevMesh;
+    static Mesh prevMesh {
+        get {
+            if (_prevMesh == null) _prevMesh = CopyMesh();
+            return _prevMesh;
+        }
+    }
     static Texture2D prevTexture {
         get {
             int count = window.undoTextures.Count;
@@ -316,7 +325,7 @@ public class RobBossEditor : EditorWindow {
         if (window.canvasID == 0) {
             MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
             f.sharedMesh = CopyMesh();
-            prevMesh = CopyMesh();
+            _prevMesh = CopyMesh();
         }
         else {
             Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
@@ -488,7 +497,10 @@ public class RobBossEditor : EditorWindow {
         if (canvasName == "Vertex") {
             MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
             Mesh m = prevMesh;
-            if (!didChange) m = Instantiate(prevMesh);
+            if (!didChange) {
+                m = Instantiate(prevMesh);
+                m.name = prevMesh.name;
+            }
 
             Vector3[] verts = m.vertices;
             Vector3[] norms = m.normals;
@@ -529,7 +541,7 @@ public class RobBossEditor : EditorWindow {
             f.sharedMesh = m;
         }
         else {
-            if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
+            if (!didChange) return;//Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
             Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
         }
     }
