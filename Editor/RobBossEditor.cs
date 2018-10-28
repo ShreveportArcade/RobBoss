@@ -368,6 +368,7 @@ public class RobBossEditor : EditorWindow {
 
     static void ResetRenderCanvas () {
         if (_renderCanvas != null) {
+            RenderTexture.active = null;
             _renderCanvas.Release();
             _renderCanvas = null;
         }
@@ -376,8 +377,10 @@ public class RobBossEditor : EditorWindow {
     public static void OnSceneGUI(SceneView sceneview) {
         EventType t = Event.current.type;
         bool canPaint = (t != EventType.MouseUp && t != EventType.Repaint && t != EventType.Layout);
-        if (painting && canPaint && RaycastTarget(t == EventType.MouseDrag || t == EventType.MouseMove)) {
-            PaintTarget();
+        bool moving = t == EventType.MouseDrag || t == EventType.MouseMove;
+        if (painting && canPaint) {
+            if (RaycastTarget(moving)) PaintTarget();
+            else if (t == EventType.MouseMove) ClearPaint();
         }
         else if (t == EventType.MouseUp) {
             window.RegisterChange();
@@ -546,5 +549,14 @@ public class RobBossEditor : EditorWindow {
             if (!didChange) Graphics.Blit(prevTexture, renderCanvas, brushMaterial);
             else Graphics.Blit(renderCanvas, renderCanvas, brushMaterial);
         }
+    }
+
+    static void ClearPaint () {
+        if (canvasName == "Vertex") {
+            MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
+            f.sharedMesh = Instantiate(prevMesh);
+            f.sharedMesh.name = prevMesh.name;
+        }
+        else Graphics.Blit(prevTexture, renderCanvas);
     }
 }
