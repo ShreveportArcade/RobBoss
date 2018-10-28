@@ -153,6 +153,7 @@ public class RobBossEditor : EditorWindow {
         colliderMesh.hideFlags = HideFlags.HideAndDontSave;
         raycastTarget.sharedMesh = colliderMesh;
 
+        pressureType = (PressureType)EditorPrefs.GetInt("RobBoss.PressureType", 0);
         paintType = (PaintType)EditorPrefs.GetInt("RobBoss.PaintType", 0);
         string colorString = EditorPrefs.GetString("RobBoss.Color", "FFFFFFFF");
         ColorUtility.TryParseHtmlString("#" + colorString, out color);
@@ -170,6 +171,7 @@ public class RobBossEditor : EditorWindow {
         DestroyImmediate(colliderMesh);
         DestroyImmediate(raycastTarget.gameObject);
 
+        EditorPrefs.SetInt("RobBoss.PressureType", (int)pressureType);
         EditorPrefs.SetInt("RobBoss.PaintType", (int)paintType);
         EditorPrefs.SetString("RobBoss.Color", ColorUtility.ToHtmlStringRGBA(color));
         EditorPrefs.SetFloat("RobBoss.Radius", radius);
@@ -288,7 +290,7 @@ public class RobBossEditor : EditorWindow {
 
         GUI.enabled = (_renderCanvas != null);
         if (GUILayout.Button("Reset")) {
-            ResetRenderCanvas();
+            ResetCanvas();
         }
 
         EditorGUILayout.BeginHorizontal();
@@ -313,6 +315,7 @@ public class RobBossEditor : EditorWindow {
             return _prevMesh;
         }
     }
+
     static Texture2D prevTexture {
         get {
             int count = window.undoTextures.Count;
@@ -321,6 +324,7 @@ public class RobBossEditor : EditorWindow {
             else return Texture2D.whiteTexture;
         }
     }
+
     static void SetupPainting () {
         if (window.canvasID == 0) {
             MeshFilter f = window.paintTarget.GetComponent<MeshFilter>();
@@ -328,10 +332,9 @@ public class RobBossEditor : EditorWindow {
             _prevMesh = CopyMesh();
         }
         else {
-            Texture tex = window.paintTarget.sharedMaterial.GetTexture(canvasName);
-            if (_renderCanvas == null || tex == null || _renderCanvas.GetInstanceID() != tex.GetInstanceID()) {
-                ResetRenderCanvas();
-            }
+            ResetRenderCanvas();
+            canvasTexture = window.paintTarget.sharedMaterial.GetTexture(canvasName) as Texture2D;
+            window.undoTextures.Clear();
         }
     }
 
@@ -358,19 +361,15 @@ public class RobBossEditor : EditorWindow {
         ResetRenderCanvas();
     }
 
+    static void ResetCanvas () {
+        ResetRenderCanvas();
+        window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
+    }
+
     static void ResetRenderCanvas () {
         if (_renderCanvas != null) {
             _renderCanvas.Release();
             _renderCanvas = null;
-        }
-
-        if (canvasTexture != null) {
-            if (window.paintTarget != null) {
-                Undo.RecordObject(window.paintTarget, "sets canvas");
-                window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
-            }
-            canvasTexture = null;
-            canvasPath = null;
         }
     }
 
@@ -403,7 +402,10 @@ public class RobBossEditor : EditorWindow {
         if (r == null) return;
 
         Undo.RecordObject(window, "sets paint target");
+        ResetRenderCanvas();
+    
         window.paintTarget = r;
+        
         if (painting) SetupPainting();
         UpdateCanvasNames();
         colliderMesh.Clear();
