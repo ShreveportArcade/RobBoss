@@ -180,7 +180,7 @@ public class RobBossEditor : EditorWindow {
 
     static bool didChange = false;
     void RegisterChange () {
-        if (!didChange || window.paintTarget == null) return;
+        if (!didChange || !hasPaintTarget) return;
         didChange = false;
         Undo.RecordObject(window, "paints on canavs");
             
@@ -218,7 +218,7 @@ public class RobBossEditor : EditorWindow {
             MeshFilter f = paintTarget.GetComponent<MeshFilter>();
             if (count > 0) f.sharedMesh = undoMeshes[count-1];
             else if (canvasMesh != null) f.sharedMesh = canvasMesh;
-            _prevMesh = CopyMesh();
+            _prevMesh = null;
         }
         else {
             Graphics.Blit(prevTexture, renderCanvas);
@@ -227,10 +227,8 @@ public class RobBossEditor : EditorWindow {
 
     void SceneClosed(Scene scene) {
         painting = false;
-        if (paintTarget == null) {
-            undoMeshes.Clear();
-            undoTextures.Clear();
-        }
+        undoMeshes.Clear();
+        undoTextures.Clear();
     }
 
     void OnGUI () {
@@ -375,10 +373,11 @@ public class RobBossEditor : EditorWindow {
     }
 
     public static void OnSceneGUI(SceneView sceneview) {
+        if (!painting || !hasPaintTarget) return;
         EventType t = Event.current.type;
         bool canPaint = (t != EventType.MouseUp && t != EventType.Repaint && t != EventType.Layout);
         bool moving = t == EventType.MouseDrag || t == EventType.MouseMove;
-        if (painting && canPaint) {
+        if (canPaint) {
             if (RaycastTarget(moving)) PaintTarget();
             else if (t == EventType.MouseMove) ClearPaint();
         }
@@ -431,7 +430,7 @@ public class RobBossEditor : EditorWindow {
     static void UpdateCanvasNames() {
         List<string> names = new List<string>();
         names.Add("Vertex");
-        if (window.paintTarget == null) return;
+        if (!hasPaintTarget) return;
         Shader shader = window.paintTarget.sharedMaterial.shader;
         for (int i = 0; i < ShaderUtil.GetPropertyCount(shader); i++) {
             if (ShaderUtil.IsShaderPropertyHidden(shader, i)) continue;
@@ -444,7 +443,7 @@ public class RobBossEditor : EditorWindow {
 
     static bool RaycastTarget(bool mouseMoved) {
         if (!(EditorWindow.mouseOverWindow is SceneView)) return false; 
-        if (raycastTarget == null || window.paintTarget == null) return false;
+        if (raycastTarget == null || !hasPaintTarget) return false;
 
         raycastTarget.transform.position = window.paintTarget.transform.position;
         raycastTarget.transform.rotation = window.paintTarget.transform.rotation;
