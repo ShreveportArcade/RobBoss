@@ -486,7 +486,7 @@ public class RobBossEditor : EditorWindow {
         Event e = Event.current;
 
         if (e.modifiers != EventModifiers.None) return;
-        float pressure = Mathf.Pow(e.pressure, 10);
+        float pressure = e.pressure * e.pressure;
         if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag) {
             GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
             e.Use();
