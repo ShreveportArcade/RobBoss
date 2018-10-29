@@ -361,6 +361,7 @@ public class RobBossEditor : EditorWindow {
 
     static void ResetCanvas () {
         ResetRenderCanvas();
+        if (window.paintTarget == null) return;
         window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
     }
 
@@ -404,7 +405,7 @@ public class RobBossEditor : EditorWindow {
         if (r == null) return;
 
         Undo.RecordObject(window, "sets paint target");
-        ResetRenderCanvas();
+        ResetCanvas();
     
         window.paintTarget = r;
         
