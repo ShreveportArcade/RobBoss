@@ -60,6 +60,8 @@ public class RobBossEditor : EditorWindow {
     static Vector3 norm;
 
     static Texture2D canvasTexture;
+    static Vector2 canvasScale;
+    static Vector2 canvasOffset;
     static Mesh canvasMesh;
     static string canvasMeshName;
     static string canvasPath;
@@ -69,7 +71,8 @@ public class RobBossEditor : EditorWindow {
             if (!hasPaintTarget) return null;
             if (_renderCanvas == null) {
                 canvasTexture = window.paintTarget.sharedMaterial.GetTexture(canvasName) as Texture2D;
-
+                canvasScale = window.paintTarget.sharedMaterial.GetTextureScale(canvasName);
+                canvasOffset = window.paintTarget.sharedMaterial.GetTextureOffset(canvasName);
                 if (canvasTexture == null) {
                     _renderCanvas = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
                     _renderCanvas.wrapMode = TextureWrapMode.Repeat;
@@ -465,6 +468,10 @@ public class RobBossEditor : EditorWindow {
             }
 
             if (window.canvasID > 0) {
+                uv = Vector2.Scale(uv, canvasScale);
+                uv += canvasOffset;
+                uv = new Vector2(uv.x + Mathf.Floor(Mathf.Abs(uv.x)), uv.y + Mathf.Floor(Mathf.Abs(uv.y)));
+                uv = new Vector2(uv.x % 1f, uv.y % 1f);
                 Color c = color;
                 c.a *= blend;
                 brushMaterial.SetColor("_Color", c);
