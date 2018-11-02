@@ -40,8 +40,13 @@ public class RobBossEditor : EditorWindow {
 
     enum PressureType { Opacity = 1, Size = 2 }
     static PressureType pressureType = (PressureType)0;
+
     enum PaintType { Normal, Directional, Add, Subtract, Multiply }
     static PaintType paintType = PaintType.Normal;
+
+    enum ColorMask { Red = 1, Green = 2, Blue = 4, Alpha = 8 }
+    static ColorMask colorMask = (ColorMask)15;
+    static Color colorMaskAsColor = Color.white;
 
     static bool painting = false;
     static bool hasPaintTarget {
@@ -117,6 +122,7 @@ public class RobBossEditor : EditorWindow {
                         float x = i*0.0625f-1;
                         float y = j*0.0625f-1;
                         float a = Mathf.Clamp01(1-Mathf.Sqrt(x*x+y*y));
+                        if (a < 0.1) a = 0;
                         colors[j*32+i] = new Color(1,1,1,a*a);
                     }
                 }
@@ -158,6 +164,7 @@ public class RobBossEditor : EditorWindow {
 
         pressureType = (PressureType)EditorPrefs.GetInt("RobBoss.PressureType", 0);
         paintType = (PaintType)EditorPrefs.GetInt("RobBoss.PaintType", 0);
+        colorMask = (ColorMask)EditorPrefs.GetInt("RobBoss.ColorMask", 15);
         string colorString = EditorPrefs.GetString("RobBoss.Color", "FFFFFFFF");
         ColorUtility.TryParseHtmlString("#" + colorString, out color);
         radius = EditorPrefs.GetFloat("RobBoss.Radius", 0.5f);
@@ -176,6 +183,7 @@ public class RobBossEditor : EditorWindow {
 
         EditorPrefs.SetInt("RobBoss.PressureType", (int)pressureType);
         EditorPrefs.SetInt("RobBoss.PaintType", (int)paintType);
+        EditorPrefs.SetInt("RobBoss.ColorMask", (int)colorMask);
         EditorPrefs.SetString("RobBoss.Color", ColorUtility.ToHtmlStringRGBA(color));
         EditorPrefs.SetFloat("RobBoss.Radius", radius);
         EditorPrefs.SetFloat("RobBoss.Blend", blend);
@@ -251,23 +259,26 @@ public class RobBossEditor : EditorWindow {
         switch (paintType) {
             case PaintType.Normal:
             case PaintType.Directional:
-                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.One);
-                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                brushMaterial.SetInt("_Operation", 0);
                 break;
             case PaintType.Add:
-                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.One);
-                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+                brushMaterial.SetInt("_Operation", 1);
                 break;
             case PaintType.Subtract:
-                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.OneMinusSrcColor);
-                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+                brushMaterial.SetInt("_Operation", 2);
                 break;
             case PaintType.Multiply:
-                brushMaterial.SetFloat("_SrcBlend", (float)BlendMode.DstColor);
-                brushMaterial.SetFloat("_DstBlend", (float)BlendMode.Zero);
+                brushMaterial.SetInt("_Operation", 3);
                 break;
         }
-        
+
+        colorMask = (ColorMask)EditorGUILayout.EnumMaskField("Color Mask", colorMask);
+        colorMaskAsColor = Color.black;
+        if (((int)colorMask & (int)ColorMask.Red) == (int)ColorMask.Red) colorMaskAsColor.r = 1;
+        if (((int)colorMask & (int)ColorMask.Green) == (int)ColorMask.Green) colorMaskAsColor.g = 1;
+        if (((int)colorMask & (int)ColorMask.Blue) == (int)ColorMask.Blue) colorMaskAsColor.b = 1;
+        if (((int)colorMask & (int)ColorMask.Alpha) == (int)ColorMask.Alpha) colorMaskAsColor.a = 1;
+
         if (canvasID == 0) falloff = EditorGUILayout.CurveField("Falloff", falloff, Color.white, Rect.MinMaxRect(0,0,1,1));
         else brushTexture = EditorGUILayout.ObjectField("Brush", brushTexture, typeof(Texture2D), false) as Texture2D;
         color = EditorGUILayout.ColorField("Color", color); 
@@ -275,6 +286,7 @@ public class RobBossEditor : EditorWindow {
         string radLabel = (canvasID == 0) ? "Radius (meters)" : "Radius (UV)";  
         radius = Mathf.Max(0, EditorGUILayout.FloatField(radLabel, radius));
         blend = EditorGUILayout.Slider("Blend", blend, 0, 1);
+        brushMaterial.SetColor("_ColorMask", colorMaskAsColor * blend);
 
         GUI.enabled = hasPaintTarget;
         if (!painting && GUILayout.Button("Start Painting")) {
@@ -291,6 +303,7 @@ public class RobBossEditor : EditorWindow {
 
         GUI.enabled = (_renderCanvas != null);
         if (GUILayout.Button("Reset")) {
+            Undo.RecordObject(window, "resets canvas");
             ResetCanvas();
         }
 
@@ -364,6 +377,7 @@ public class RobBossEditor : EditorWindow {
 
     static void ResetCanvas () {
         ResetRenderCanvas();
+        window.undoTextures.Clear();
         if (window.paintTarget == null) return;
         window.paintTarget.sharedMaterial.SetTexture(canvasName, canvasTexture);
     }
@@ -472,9 +486,7 @@ public class RobBossEditor : EditorWindow {
                 uv += canvasOffset;
                 uv = new Vector2(uv.x + Mathf.Floor(Mathf.Abs(uv.x)), uv.y + Mathf.Floor(Mathf.Abs(uv.y)));
                 uv = new Vector2(uv.x % 1f, uv.y % 1f);
-                Color c = color;
-                c.a *= blend;
-                brushMaterial.SetColor("_Color", c);
+                brushMaterial.SetColor("_Color", color);
                 brushMaterial.SetVector("_Transform", new Vector4(uv.x, uv.y, 0, radius));
             }
 
@@ -546,7 +558,13 @@ public class RobBossEditor : EditorWindow {
                         newColor = colors[i] * color;
                         break;
                 }
-                colors[i] = Color.Lerp(colors[i], newColor, b);
+
+                Color c = colors[i];
+                c.r = Mathf.Clamp01(Mathf.Lerp(c.r, newColor.r, b * colorMaskAsColor.r));
+                c.g = Mathf.Clamp01(Mathf.Lerp(c.g, newColor.g, b * colorMaskAsColor.g));
+                c.b = Mathf.Clamp01(Mathf.Lerp(c.b, newColor.b, b * colorMaskAsColor.b));
+                c.a = Mathf.Clamp01(Mathf.Lerp(c.a, newColor.a, b * colorMaskAsColor.a));
+                colors[i] = c;
             }
 
             m.colors = colors;
