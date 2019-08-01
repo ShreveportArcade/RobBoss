@@ -277,7 +277,7 @@ public class RobBossEditor : EditorWindow {
             canvasID = newCanvasID;
         }
 
-        pressureType = (PressureType)EditorGUILayout.EnumMaskField("Pressure Type", pressureType);
+        pressureType = (PressureType)EditorGUILayout.EnumFlagsField("Pressure Type", pressureType);
 
         paintType = (PaintType)EditorGUILayout.EnumPopup("Paint Type", paintType);
         switch (paintType) {
@@ -296,7 +296,7 @@ public class RobBossEditor : EditorWindow {
                 break;
         }
 
-        colorMask = (ColorMask)EditorGUILayout.EnumMaskField("Color Mask", colorMask);
+        colorMask = (ColorMask)EditorGUILayout.EnumFlagsField("Color Mask", colorMask);
         colorMaskAsColor = Color.black;
         if (((int)colorMask & (int)ColorMask.Red) == (int)ColorMask.Red) colorMaskAsColor.r = 1;
         if (((int)colorMask & (int)ColorMask.Green) == (int)ColorMask.Green) colorMaskAsColor.g = 1;
