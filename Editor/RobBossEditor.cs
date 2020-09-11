@@ -171,12 +171,12 @@ public class RobBossEditor : EditorWindow {
         window.Show();
     }
 
-    static SceneView.OnSceneFunc onSceneFunc;
+    static System.Action<SceneView> onSceneFunc;
     void OnEnable () {
         Undo.undoRedoPerformed += UndoRedo;
         EditorSceneManager.sceneClosed += SceneClosed;
 
-        if (onSceneFunc == null) onSceneFunc = new SceneView.OnSceneFunc(OnSceneGUI);
+        if (onSceneFunc == null) onSceneFunc = new System.Action<SceneView>(OnSceneGUI);
 
         GameObject g = new GameObject("RobBossTarget");
         g.hideFlags = HideFlags.HideAndDontSave;
@@ -200,7 +200,7 @@ public class RobBossEditor : EditorWindow {
     void OnDisable () {
         Undo.undoRedoPerformed -= UndoRedo;
         EditorSceneManager.sceneClosed -= SceneClosed;
-        if (painting) SceneView.onSceneGUIDelegate -= onSceneFunc;
+        if (painting) SceneView.duringSceneGui -= onSceneFunc;
 
         DestroyImmediate(colliderMesh);
         DestroyImmediate(raycastTarget.gameObject);
@@ -315,12 +315,12 @@ public class RobBossEditor : EditorWindow {
         GUI.enabled = hasPaintTarget;
         if (!painting && GUILayout.Button("Start Painting")) {
             painting = true;
-            SceneView.onSceneGUIDelegate += onSceneFunc;
+            SceneView.duringSceneGui += onSceneFunc;
             SetupPainting();
         }
         else if (painting && GUILayout.Button("Stop Painting")) {
             painting = false;
-            SceneView.onSceneGUIDelegate -= onSceneFunc;
+            SceneView.duringSceneGui -= onSceneFunc;
         }
 
         if (canvasName == "Vertex") return;
